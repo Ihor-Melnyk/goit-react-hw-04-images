@@ -11,4 +11,4 @@ const Loader = imageName => (
 
 export default Loader;
 
-Loader.propTypes = { imageName: PropTypes.string.isRequired };
+Loader.propTypes = { imageName: PropTypes.array.isRequired };

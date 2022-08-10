@@ -1,4 +1,3 @@
-import { Component } from 'react';
 import ImageError from 'components/ImageError';
 import ImageGallery from 'components/ImageGallery';
 import Loader from 'components/Loader';
@@ -9,134 +8,105 @@ import toast from 'react-hot-toast';
 import PropTypes from 'prop-types';
 import { AiFillCloseCircle } from 'react-icons/ai';
 import '../../styles.css';
+import { useState, useEffect } from 'react';
 
-export default class ImageInfo extends Component {
-  state = {
-    image: [],
-    pageNumber: 1,
-    pageMax: null,
-    error: null,
-    status: 'idle',
-    showModal: false,
-    imageModal: '',
-  };
+const Status = {
+  IDLE: 'idle',
+  PENDING: 'pending',
+  RESOLVED: 'resolved',
+  REJECTED: 'rejected',
+};
 
-  componentDidUpdate(prevSProps, prevState) {
-    const prevName = prevSProps.imageName;
-    const nextName = this.props.imageName;
+export default function ImageInfo({ imageName }) {
+  const [image, setImage] = useState([]);
+  const [pageNumber, setPageNumber] = useState(1);
+  const [pageMax, setPageMax] = useState(null);
+  const [error, setError] = useState(null);
+  const [status, setStatus] = useState(Status.IDLE);
+  const [showModal, setShowModal] = useState(false);
+  const [imageModal, setImageModal] = useState('');
+  const [prevImgName, setPrevImgName] = useState('');
 
-    const prevPageNumber = prevState.pageNumber;
-    const nextPageNumber = this.state.pageNumber;
-
-    //запит нового імені першої сторірнки
-    if (prevName !== nextName) {
-      this.setState({ status: 'pending' });
-
-      imageApi
-        .fetchImage(nextName, '1')
-        .then(image => {
-          if (image.total === 0) {
-            return Promise.reject(
-              toast.error(`There is no picture with that name "${nextName}"`)
-            );
-          }
-          const pageMax = Math.ceil(image.totalHits / 12);
-          this.setState({
-            pageNumber: 1,
-            image: image.hits,
-            status: 'resolved',
-            pageMax: pageMax,
-          });
-        })
-        .catch(error =>
-          this.setState({
-            error: `There is no picture with that name "${nextName}"`,
-            status: 'rejected',
-          })
-        );
-    }
-
-    //запит наступних сторінок
-    if (
-      prevPageNumber !== nextPageNumber &&
-      prevName === nextName &&
-      nextPageNumber !== 1
-    ) {
-      this.setState({ status: 'pending' });
-
-      imageApi
-        .fetchImage(nextName, nextPageNumber)
-        .then(image =>
-          this.setState({
-            image: [...prevState.image, ...image.hits],
-            status: 'resolved',
-          })
-        )
-        .catch(error =>
-          this.setState({
-            status: 'rejected',
-          })
-        );
-    }
-  }
-
-  toggleModal = () => {
-    this.setState(({ showModal }) => ({
-      showModal: !showModal,
-    }));
-  };
-
-  handleCardImage = image => {
-    this.setState({
-      imageModal: image,
-    });
-    this.toggleModal();
-  };
-
-  handleBtnLoadMoreClick = () => {
-    this.setState(prevState => ({
-      pageNumber: prevState.pageNumber + 1,
-    }));
-  };
-
-  render() {
-    const { image, status, error, pageNumber, pageMax, showModal } = this.state;
-    if (status === 'idle') {
+  useEffect(() => {
+    if (!imageName) {
       return;
     }
-    if (status === 'pending') {
-      return (
-        <>
-          <ImageGallery imageName={image} />
-          <Loader imageName={this.props.imageName} />
-        </>
-      );
-    }
-    if (status === 'rejected') {
-      return <ImageError message={error} />;
-    }
-    if (status === 'resolved') {
-      return (
-        <>
-          <ImageGallery imageName={image} cardClick={this.handleCardImage} />
-          {showModal && (
-            <Modal onClose={this.toggleModal} onOpen={this.state.imageModal}>
-              <button
-                className={'Button-modal'}
-                type="button"
-                onClick={this.toggleModal}
-              >
-                <AiFillCloseCircle size={32} />
-              </button>
-            </Modal>
-          )}
 
-          {pageNumber !== pageMax && (
-            <Button btnClick={this.handleBtnLoadMoreClick} />
-          )}
-        </>
-      );
+    if (imageName !== prevImgName) {
+      setImage([]);
+      setPageNumber(1);
+      setPrevImgName(imageName);
+      return;
     }
+    setStatus(Status.PENDING);
+
+    imageApi
+      .fetchImage(prevImgName, pageNumber)
+      .then(image => {
+        if (image.total === 0) {
+          return Promise.reject(
+            toast.error(`There is no picture with that name "${imageName}"`)
+          );
+        }
+        setPageMax(Math.ceil(image.totalHits / 12));
+
+        pageNumber === 1
+          ? setImage([...image.hits])
+          : setImage(prevState => [...prevState, ...image.hits]);
+
+        setStatus(Status.RESOLVED);
+      })
+      .catch(error => {
+        setError(`There is no picture with that name "${imageName}"`);
+        setStatus(Status.REJECTED);
+      });
+  }, [prevImgName, pageNumber, imageName]);
+
+  const toggleModal = () => {
+    setShowModal(!showModal);
+  };
+
+  const handleCardImage = image => {
+    setImageModal(image);
+    toggleModal();
+  };
+
+  const handleBtnLoadMoreClick = () => {
+    setPageNumber(pageNumber + 1);
+  };
+
+  if (status === Status.IDLE) {
+    return;
+  }
+  if (status === Status.PENDING) {
+    return (
+      <>
+        <ImageGallery imageName={image} />
+        <Loader imageName={image} />
+      </>
+    );
+  }
+  if (status === Status.REJECTED) {
+    return <ImageError message={error} />;
+  }
+  if (status === Status.RESOLVED) {
+    return (
+      <>
+        <ImageGallery imageName={image} cardClick={handleCardImage} />
+        {showModal && (
+          <Modal onClose={toggleModal} onOpen={imageModal}>
+            <button
+              className={'Button-modal'}
+              type="button"
+              onClick={toggleModal}
+            >
+              <AiFillCloseCircle size={32} />
+            </button>
+          </Modal>
+        )}
+        {pageNumber !== pageMax && <Button btnClick={handleBtnLoadMoreClick} />}
+      </>
+    );
   }
 }
 
